@@ -1,0 +1,8 @@
+# ignore venv file
+.venv/
+#ignore config file
+config.py
+# Ignore macOS system files
+.DS_Store
+# Ignore compiled Python files
+__pycache__/
