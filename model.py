@@ -1,17 +1,37 @@
 import os
 import PyPDF2
+import transformers
+import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM
 
-# Initialize the Llama3 model and tokenizer
-model_name = "huggingface/llama3-8gb"  # Use the appropriate model name
-tokenizer = AutoTokenizer.from_pretrained(model_name)
-model = AutoModelForCausalLM.from_pretrained(model_name)
+model_id = "meta-llama/Meta-Llama-3-8B-Instruct"
 
-def generate_summary(text: str, max_length: int = 150):
-    inputs = tokenizer.encode(text, return_tensors="pt")
-    outputs = model.generate(inputs, max_length=max_length, num_beams=4, early_stopping=True)
-    summary = tokenizer.decode(outputs[0], skip_special_tokens=True)
-    return summary
+# Initialize the text generation pipeline with the Llama3 model
+pipeline = transformers.pipeline(
+    "text-generation",
+    model=model_id,
+    model_kwargs={"torch_dtype": torch.bfloat16},
+    device_map="auto",
+)
+
+def generate_summary(text: str, max_new_tokens: int = 150):
+    # Prepare the input as a system message for the model
+    messages = [
+        {"role": "system", "content": "You are a chatbot that provides concise summaries of book content."},
+        {"role": "user", "content": text},
+    ]
+    
+    # Generate summary
+    outputs = pipeline(
+        messages,
+        max_new_tokens=max_new_tokens,
+        do_sample=True,
+        temperature=0.6,
+        top_p=0.9,
+    )
+    
+    # Return the generated summary text
+    return outputs[0]["generated_text"]
 
 def extract_text_from_pdf(pdf_path: str) -> str:
     text = ""
