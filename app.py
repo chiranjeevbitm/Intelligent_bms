@@ -1,9 +1,18 @@
 import streamlit as st
+import pandas as pd
+import numpy as np
+import base64
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy import create_engine
 from config import DATABASE_CONFIG
 from models import Book, Review
 import summarization
+from recommendation_model import define_model, recommend_books
+
+# Load the recommendation model
+knn, label_encoder, df, scaler = define_model()
+# Load the recommendation model
+knn, label_encoder, df, scaler = define_model()
 
 # Database setup
 DATABASE_URL = (
@@ -17,8 +26,39 @@ Session = sessionmaker(bind=engine)
 def authenticate(username, password):
     return username == "l" and password == "p"
 
+def encode_image(image_path):
+    with open(image_path, "rb") as image_file:
+        encoded_string = base64.b64encode(image_file.read()).decode()
+        return encoded_string
+
+
+def add_bg_image():
+    # Load and encode the image to base64
+    image_path = "library.jpg"
+    encoded_image = encode_image(image_path)
+    
+    # Embed CSS for the background image and text areas
+    # st.markdown(
+    #     f"""
+    #     <style>
+    #     .stApp {{
+    #         background-image: url(data:image/jpeg;base64,{encoded_image});
+    #         background-size: cover;
+    #         background-position: center;
+    #         background-repeat: no-repeat;
+    #     }}
+    #     .stMarkdown, .stTextInput, .stNumberInput, .stTextArea, .stSlider, .stButton {{
+    #         background-color: rgba(255, 255, 255, 0.8);
+    #         padding: 10px;
+    #         border-radius: 5px;
+    #     }}
+    #     </style>
+    #     """,
+    #     unsafe_allow_html=True
+    # )
 # Librarian Page
 def librarian_page():
+    add_bg_image()
     st.title("Librarian Page")
 
     # Check if the user is already logged in
@@ -32,7 +72,6 @@ def librarian_page():
         if st.button("Login"):
             if authenticate(username, password):
                 st.session_state.logged_in = True
-                st.experimental_set_query_params(logged_in="true")  # Update query params to simulate rerun
                 st.success("Logged in successfully!")
             else:
                 st.error("Invalid username or password")
@@ -89,18 +128,63 @@ def librarian_page():
             st.write(f"ID: {book.id}, Title: {book.title}, Author: {book.author}, Genre: {book.genre}, Year: {book.year_published}")
         session.close()
 
+def recommendation_page():
+    add_bg_image()
+    st.title("Book Recommendation")
+
+    genre = st.text_input("Enter Genre for Recommendation")
+
+    if st.button("Get Recommendations"):
+        if genre:
+            session = Session()
+            
+            # Search for books with the specified genre
+            matching_books = session.query(Book, Review).filter(
+                Book.genre.ilike(f"%{genre}%"),
+                Book.id == Review.book_id
+            ).all()
+            
+            session.close()
+
+            if matching_books:
+                book_details = [
+                    {
+                        'Book ID': book.Book.id,
+                        'Title': book.Book.title,
+                        'Rating': book.Review.rating,
+                        'Genre': book.Book.genre,
+                        'Author': book.Book.author,
+                        'Year Published': book.Book.year_published,
+                        'Summary': book.Book.summary
+                    }
+                    for book in matching_books
+                ]
+
+                st.write(pd.DataFrame(book_details))
+            else:
+                st.write("No books found for the given genre.")
+        else:
+            st.error("Please enter a genre.")
+
 # User Page
 def user_page():
+    add_bg_image()
     st.title("User Page")
 
     # Display available books
     st.header("Available Books")
     session = Session()
     books = session.query(Book).all()
-    for book in books:
-        st.write(f"ID: {book.id}, Title: {book.title}, Author: {book.author}, Genre: {book.genre}, Year: {book.year_published}")
-        st.write(f"Summary: {book.summary}")
-    
+    st.write(pd.DataFrame({
+        'ID': [book.id for book in books],
+        'Title': [book.title for book in books],
+        'Author': [book.author for book in books],
+        'Genre': [book.genre for book in books],
+        'Year Published': [book.year_published for book in books],
+        'Summary': [book.summary for book in books]
+    }))
+    session.close()
+
     # Allow users to submit a review
     st.header("Submit a Review")
     book_id = st.text_input("Enter Book ID")
@@ -126,20 +210,24 @@ def user_page():
         finally:
             session.close()
 
-# Main Function
+# Main function
 def main():
+    st.sidebar.title("Intelligent Book Management System")
     st.sidebar.title("Navigation")
-    page = st.sidebar.selectbox("Select Page", ("Librarian Page", "User Page"))
+    page = st.sidebar.selectbox("Select Page", ("Librarian Page", "Recommendation", "User Page"))
 
     # Check query parameters to see if user is logged in
-    query_params = st.experimental_get_query_params()
+    query_params = st.query_params
     if query_params.get("logged_in") == ["true"]:
         st.session_state.logged_in = True
 
     if page == "Librarian Page":
         librarian_page()
+    elif page == "Recommendation":
+        recommendation_page()
     elif page == "User Page":
         user_page()
+
 
 if __name__ == "__main__":
     main()

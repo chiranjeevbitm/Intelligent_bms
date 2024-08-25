@@ -18,3 +18,4 @@ clob & blob - datatype - to save the content (very big files)
 ask for book title -> Summarize -> store in db -> 
 Streamlit app 
 store all books summaries in the table before hand
+
